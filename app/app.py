@@ -30,7 +30,7 @@ def extract_text_from_url(url):
 
     return trafilatura.extract(downloaded)
 
-def search_web(query, max_results=5):
+def search_web(query, max_results=1):
 
     with DDGS() as ddgs:
         results = list(
