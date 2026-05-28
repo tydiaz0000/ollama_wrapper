@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Business Chatbot</title>
+<style>
+body{
+font-family:Arial;
+max-width:600px;
+margin:auto;
+padding:30px;
+background:#f5f5f5;
+}
+#chat{
+background:white;
+padding:20px;
+height:400px;
+overflow:auto;
+border-radius:10px;
+}
+input{
+width:80%;
+padding:10px;
+}
+button{
+padding:10px;
+}
+.msg{
+margin:10px 0;
+}
+.user{color:blue;}
+.bot{color:green;}
+</style>
+</head>
+<body>
+
+<h2>ABC Dental Clinic Chatbot</h2>
+
+<div id="chat"></div>
+
+<input id="msg" placeholder="Ask something..." />
+<button onclick="send()">Send</button>
+
+<script>
+async function send(){
+  let input=document.getElementById("msg");
+  let text=input.value;
+
+  if(!text) return;
+
+  chat.innerHTML += `<div class='msg user'><b>You:</b> ${text}</div>`;
+  input.value="";
+
+  let res=await fetch("https://ollama.janzarieldiaz.com/chat",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({message:text})
+  });
+
+  let data=await res.json();
+
+  chat.innerHTML += `<div class='msg bot'><b>Bot:</b> ${data.reply}</div>`;
+  chat.scrollTop=chat.scrollHeight;
+}
+</script>
+
+</body>
+</html>

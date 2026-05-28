@@ -1,0 +1,17 @@
+Business Name: ABC Dental Clinic
+
+Location:
+Tuguegarao City, Cagayan
+
+Hours:
+Monday to Thursday except for holidays
+8:00 AM to 4:30 PM
+
+Services:
+Dental Cleaning
+Tooth Extraction
+Braces Consultation
+Walk-in and Appointment accepted
+
+Phone:
+0917-123-4567

@@ -1,0 +1,31 @@
+services:
+  chatbot:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    ports:
+      - "5050:5000"
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    networks:
+      - internal
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    networks:
+      - internal
+
+volumes:
+  ollama:
+networks:
+  internal:
+    external: true

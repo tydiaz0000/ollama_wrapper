@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messenger Conversation Viewer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      background: #0084ff;
+      color: white;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .search-container {
+      flex: 1;
+      max-width: 400px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 20px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .conversation-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .message {
+      display: flex;
+      margin-bottom: 15px;
+      align-items: flex-end;
+    }
+
+    .message.sent {
+      flex-direction: row-reverse;
+    }
+
+    .message-bubble {
+      max-width: 70%;
+      padding: 10px 15px;
+      border-radius: 18px;
+      position: relative;
+    }
+
+    .message.sent .message-bubble {
+      background: #0084ff;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.received .message-bubble {
+      background: #e4e6eb;
+      color: black;
+      border-bottom-left-radius: 4px;
+    }
+
+    .sender-name {
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      opacity: 0.7;
+    }
+
+    .message.sent .sender-name {
+      display: none;
+    }
+
+    .message-text {
+      word-wrap: break-word;
+    }
+
+    .message-time {
+      font-size: 10px;
+      margin-top: 5px;
+      opacity: 0.7;
+      text-align: right;
+    }
+
+    .message-type-media {
+      background: #fff;
+      padding: 5px;
+      border-radius: 10px;
+    }
+
+    .message-type-media img,
+    .message-type-media video {
+      max-width: 250px;
+      max-height: 250px;
+      border-radius: 8px;
+    }
+
+    .message-type-media .media-placeholder {
+      padding: 20px;
+      text-align: center;
+      color: #666;
+      font-size: 12px;
+    }
+
+    .reactions {
+      display: flex;
+      gap: 5px;
+      margin-top: 5px;
+    }
+
+    .reaction {
+      background: rgba(255,255,255,0.2);
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    .message.received .reaction {
+      background: rgba(0,0,0,0.1);
+    }
+
+    .message.unsent {
+      opacity: 0.7;
+    }
+
+    .message.unsent .message-bubble {
+      background: #ffeaea !important;
+      color: #666;
+      border: 1px dashed #ffcccc;
+      font-style: italic;
+    }
+
+    .message.unsent .sender-name {
+      color: #ff6b6b !important;
+    }
+
+    .no-results {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .json-input-container {
+      padding: 15px 20px;
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .json-input {
+      width: 100%;
+      height: 100px;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      resize: vertical;
+    }
+
+    .load-btn {
+      margin-top: 10px;
+      padding: 8px 20px;
+      background: #0084ff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .load-btn:hover {
+      background: #0066cc;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .load-btn.secondary {
+      background: #34b7f1;
+    }
+
+    .load-btn.secondary:hover {
+      background: #2196f3;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>💬 Conversation Viewer</h1>
+    <div class="search-container">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search messages...">
+    </div>
+  </div>
+
+  <div class="json-input-container" id="jsonInputContainer">
+    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+      <input type="file" class="file-input" id="fileInput" accept=".json">
+      <button class="load-btn" onclick="document.getElementById('fileInput').click()">📁 Import JSON File</button>
+      <button class="load-btn secondary" onclick="loadMessages()">Load Messages</button>
+    </div>
+    <textarea class="json-input" id="jsonInput" placeholder="Or paste your JSON array here..."></textarea>
+  </div>
+
+  <div class="conversation-container" id="conversation">
+    <div class="no-results">
+      <p>Import a JSON file or paste JSON data, then click "Load Messages" to view conversation</p>
+
+  <script>
+    // Color mapping for senders - more distinguishable colors
+    const senderColors = {};
+    const colorPalette = [
+      '#e53935', // Red
+      '#1e88e5', // Blue
+      '#43a047', // Green
+      '#fb8c00', // Orange
+      '#8e24aa', // Purple
+      '#00acc1', // Cyan
+      '#f4511e', // Deep Orange
+      '#3949ab', // Indigo
+      '#7cb342', // Light Green
+      '#d81b60', // Pink
+      '#6d4c41', // Brown
+      '#546e7a', // Blue Grey
+    ];
+    let colorIndex = 0;
+
+    function getSenderColor(senderName) {
+      if (!senderColors[senderName]) {
+        senderColors[senderName] = colorPalette[colorIndex % colorPalette.length];
+        colorIndex++;
+      }
+      return senderColors[senderName];
+    }
+
+    function formatTimestamp(timestamp) {
+      // Convert from UTC to UTC+8
+      const date = new Date(timestamp);
+      // Create a date in UTC+8 by adding 8 hours
+      const utc8Date = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+      return utc8Date.toLocaleString('en-US', { 
+        timeZone: 'Asia/Singapore',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+
+    function createMessageElement(msg, senderColor) {
+      const isSent = msg.senderName === 'me' || msg.senderName === 'You';
+      const isUnsent = msg.isUnsent === true;
+      const div = document.createElement('div');
+      div.className = `message ${isSent ? 'sent' : 'received'}${isUnsent ? ' unsent' : ''}`;
+
+      let content = '';
+      
+      if (msg.type === 'media' && msg.media && msg.media.length > 0) {
+        const mediaItem = msg.media[0];
+        if (mediaItem.uri && mediaItem.uri.startsWith('http')) {
+          content = `
+            <div class="message-type-media">
+              <img src="${mediaItem.uri}" alt="Media" onerror="this.style.display='none';this.parentElement.innerHTML='<div class=\\'media-placeholder\\'>Media (image failed to load)</div>'">
+            </div>
+          `;
+        } else {
+          content = `
+            <div class="message-type-media">
+              <div class="media-placeholder">📎 Media (local file)</div>
+            </div>
+          `;
+        }
+      }
+
+      const text = msg.text || '';
+      
+      if (msg.reactions && msg.reactions.length > 0) {
+        const reactionsHtml = msg.reactions.map(r => 
+          `<span class="reaction">${r.actor}: ${r.reaction || '👍'}</span>`
+        ).join('');
+        div.dataset.reactions = reactionsHtml;
+      }
+
+      div.innerHTML = `
+        <div class="message-bubble" style="${!isSent ? `background: ${senderColor}20;` : ''}">
+          ${!isSent ? `<div class="sender-name" style="color: ${senderColor}">${msg.senderName}${isUnsent ? ' (unsent)' : ''}</div>` : ''}
+          <div class="message-text">${content}${text}</div>
+          <div class="message-time">${formatTimestamp(msg.timestamp)}${isUnsent ? ' ⚠️' : ''}</div>
+          ${msg.reactions && msg.reactions.length > 0 ? `
+            <div class="reactions">
+              ${msg.reactions.map(r => `<span class="reaction">${r.actor}: ${r.reaction || '👍'}</span>`).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      return div;
+    }
+
+    function loadMessages() {
+      const jsonInput = document.getElementById('jsonInput').value.trim();
+      
+      if (!jsonInput) {
+        alert('Please paste JSON data first');
+        return;
+      }
+
+      let messages;
+      try {
+        messages = JSON.parse(jsonInput)["messages"];
+      } catch (e) {
+        alert('Invalid JSON format');
+        return;
+      }
+
+      if (!Array.isArray(messages)) {
+        alert('JSON must be an array of messages');
+        return;
+      }
+
+      // Hide input after loading
+      document.getElementById('jsonInputContainer').classList.add('hidden');
+
+      // Sort messages by timestamp
+      messages.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Clear sender colors for new conversation
+      Object.keys(senderColors).forEach(key => delete senderColors[key]);
+      colorIndex = 0;
+
+      // Render messages
+      const container = document.getElementById('conversation');
+      container.innerHTML = '';
+
+      if (messages.length === 0) {
+        container.innerHTML = '<div class="no-results"><p>No messages found in the JSON file</p></div>';
+        return;
+      }
+
+      messages.forEach(msg => {
+        const senderColor = getSenderColor(msg.senderName);
+        container.appendChild(createMessageElement(msg, senderColor));
+      });
+
+      // Scroll to bottom
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', function(e) {
+      const searchTerm = e.target.value.toLowerCase();
+      const messages = document.querySelectorAll('.message');
+
+      messages.forEach(msg => {
+        const text = msg.querySelector('.message-text').textContent.toLowerCase();
+        const sender = msg.querySelector('.sender-name')?.textContent?.toLowerCase() || '';
+        const time = msg.querySelector('.message-time').textContent.toLowerCase();
+        
+        if (searchTerm === '' || text.includes(searchTerm) || sender.includes(searchTerm)) {
+          msg.style.display = 'flex';
+        } else {
+          msg.style.display = 'none';
+        }
+      });
+
+      // Show no results message if all hidden
+      const visibleMessages = document.querySelectorAll('.message:not([style*="display: none"])');
+      const noResults = document.querySelector('.no-results');
+      
+      if (visibleMessages.length === 0 && searchTerm) {
+        if (!noResults) {
+          const container = document.getElementById('conversation');
+          const div = document.createElement('div');
+          div.className = 'no-results';
+          div.innerHTML = '<p>No messages found matching your search</p>';
+          container.appendChild(div);
+        }
+      } else if (noResults) {
+        noResults.remove();
+      }
+    });
+
+    // Load sample data on page load for demo
+    window.addEventListener('DOMContentLoaded', function() {
+      // File input handler
+      document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            document.getElementById('jsonInput').value = event.target.result;
+            loadMessages();
+          };
+          reader.readAsText(file);
+        }
+      });
+
+      const sampleData = {
+        messages: [
+        {
+          "isUnsent": false,
+          "media": [],
+          "reactions": [],
+          "senderName": "Alice",
+          "text": "Hey! How are you doing?",
+          "timestamp": 1766749130295,
+          "type": "text"
+        },
+        {
+          "isUnsent": false,
+          "media": [],
+          "reactions": [{"actor": "Alice", "reaction": "👍"}],
+          "senderName": "Bob",
+          "text": "I'm good, thanks! Just working on this project.",
+          "timestamp": 1766749230295,
+          "type": "text"
+        },
+        {
+          "isUnsent": false,
+          "media": [{"uri": "https://picsum.photos/200/300"}],
+          "reactions": [],
+          "senderName": "Alice",
+          "text": "",
+          "timestamp": 1766749330295,
+          "type": "media"
+        },
+        {
+          "isUnsent": false,
+          "media": [],
+          "reactions": [],
+          "senderName": "Bob",
+          "text": "Nice photo! What is that?",
+          "timestamp": 1766749430295,
+          "type": "text"
+        }
+      ]
+      };
+      
+      document.getElementById('jsonInput').value = JSON.stringify(sampleData, null, 2);
+    });
+  </script>
+  <script src="https://chatbot.janzarieldiaz.com/static/widget.js" kb_name="knowledge_base_ca" data-title="Legal Assistant" data-use-kb="true"></script>
+</body>
+</html>
