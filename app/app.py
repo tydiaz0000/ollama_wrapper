@@ -154,7 +154,7 @@ def search():
         model=model,
         messages=messages
     )
-    print("Response: " + response)
+    print("Response: " + response["message"]["content"])
     end_time = time.time()
     duration = end_time - start_time
 
