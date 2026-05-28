@@ -2,5 +2,5 @@ flask
 requests
 flask-cors
 ollama
-duckduckgo-search
+ddgs
 trafilatura
