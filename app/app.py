@@ -4,6 +4,7 @@ import time
 import ollama
 from collections import OrderedDict
 from duckduckgo_search import DDGS
+import trafilatura
 
 app = Flask(__name__)
 
