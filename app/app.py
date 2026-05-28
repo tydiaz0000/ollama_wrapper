@@ -42,8 +42,8 @@ def search_web(query, max_results=5):
 def build_context(web_results):
     context_parts = []
 
-    for result in results:
-        text = extract_text_from_url(result)
+    for result in web_results:
+        text = extract_text_from_url(result["href"])
 
         context_parts.append(f"""
 Title: {result['title']}
