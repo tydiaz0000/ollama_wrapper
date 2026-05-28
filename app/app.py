@@ -3,7 +3,7 @@ from flask_cors import CORS
 import time
 import ollama
 from collections import OrderedDict
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 import trafilatura
 
 app = Flask(__name__)
