@@ -24,6 +24,40 @@ SESSIONS = OrderedDict()
 MAX_SESSIONS = 5
 
 client = ollama.Client(host="http://ollama:11434")
+
+def extract_text_from_url():
+    downloaded = trafilatura.fetch_url(url)
+
+    return trafilatura.extract(downloaded)
+
+def search_web(query, max_results=5):
+
+    with DDGS() as ddgs:
+        results = list(
+            ddgs.text(query, max_results=max_results)
+        )
+
+    return results
+
+def build_context(web_results):
+    context_parts = []
+
+    for result in results:
+        text = extract_text_from_url(result)
+
+        context_parts.append(f"""
+Title: {result['title']}
+
+Snippet:
+{text}
+
+Source:
+{result['href']}
+""")
+        
+    return "\n\n".join(context_parts)
+
+
 def get_session(session_id):
     if not session_id:
         return None
@@ -83,6 +117,86 @@ def list_models():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/search", methods=["POST"])
+def search():
+    data = request.get_json()
+
+    model = data.get("model", "gemma3:1b-it-qat")
+    prompt = data.get("prompt", "")
+    system_prompt = data.get("system", "You are a helpful web search assistant.")
+
+    if not prompt:
+        return jsonify({"error": "prompt is required"}), 400
+    print("Prompt: " + prompt)
+    start_time = time.time()
+
+
+    context = build_context(search_web(prompt))
+
+    messages = []
+    messages.append({
+        "role": "system",
+        "content": system_prompt
+    })
+
+    messages.append({
+        "role": "system",
+        "content": "Use the following search results to answer the user prompt: " + context
+    })
+    messages.append({
+        "role": "user",
+        "content": prompt
+    })
+    
+    print("Context: " + context)
+    response = client.chat(
+        model=model,
+        messages=messages
+    )
+    print("Response: " + response)
+    end_time = time.time()
+    duration = end_time - start_time
+
+    assistant_message = response["message"]["content"]
+
+    # ----------------------------
+    # TOKEN METRICS (if available)
+    # ----------------------------
+    usage = response.get("usage", {}) or {}
+
+    prompt_eval_count = response.get("prompt_eval_count")
+    eval_count = response.get("eval_count")
+    prompt_eval_duration = response.get("prompt_eval_duration")
+    eval_duration = response.get("eval_duration")
+    load_duration = response.get("load_duration")
+
+    tokens_per_sec = None
+    if eval_count and duration > 0:
+        tokens_per_sec = eval_count / duration
+
+
+
+    # ----------------------------
+    # RESPONSE
+    # ----------------------------
+    return jsonify({
+        "model": model,
+        "response": assistant_message,
+        "timing": {
+            "total_seconds": duration,
+            "tokens_per_second": tokens_per_sec
+        },
+        "tokens": {
+            "prompt_eval_count": prompt_eval_count,
+            "eval_count": eval_count,
+            "prompt_eval_duration": prompt_eval_duration,
+            "eval_duration": eval_duration,
+            "load_duration": load_duration
+        },
+    })
+
+    
 
 @app.route("/chat", methods=["POST"])
 
