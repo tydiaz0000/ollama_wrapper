@@ -25,7 +25,7 @@ MAX_SESSIONS = 5
 
 client = ollama.Client(host="http://ollama:11434")
 
-def extract_text_from_url():
+def extract_text_from_url(url):
     downloaded = trafilatura.fetch_url(url)
 
     return trafilatura.extract(downloaded)
