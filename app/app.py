@@ -46,7 +46,7 @@ def create_table():
         response_time_ms INTEGER,
 
         response_text TEXT,
-        
+        context TEXT,
 
         response_json JSONB,
 
