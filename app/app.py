@@ -374,8 +374,27 @@ def chat():
     # ----------------------------
     # RESPONSE
     # ----------------------------
+    response_json = {
+    "model": model,
+    "session_id": session_id,
+    "response": assistant_message,
+    "timing": {
+        "total_seconds": duration,
+        "tokens_per_second": tokens_per_sec
+    },
+    "tokens": {
+        "prompt_eval_count": prompt_eval_count,
+        "eval_count": eval_count,
+        "prompt_eval_duration": prompt_eval_duration,
+        "eval_duration": eval_duration,
+        "load_duration": load_duration
+    },
+    "session_active": bool(session_id),
+}
 
-    response_json = jsonify({
+    save_log(prompt, session_id, 200, duration, assistant_message, None, response_json, None)
+
+    return jsonify({
         "model": model,
         "session_id": session_id,
         "response": assistant_message,
@@ -392,10 +411,6 @@ def chat():
         },
         "session_active": bool(session_id),
     })
-
-    save_log(prompt, session_id, 200, duration, assistant_message, None, response_json, None)
-
-    return response_json
 
 
 # ----------------------------
