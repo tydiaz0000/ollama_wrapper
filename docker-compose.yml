@@ -8,6 +8,9 @@ services:
     restart: unless-stopped
     depends_on:
       - ollama
+    environment:
+      - PG_USER=${PG_USER}
+      - PG_PASS=${PG_PASS}
     networks:
       - internal
 
