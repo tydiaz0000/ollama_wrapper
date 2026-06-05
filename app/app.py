@@ -5,6 +5,9 @@ import ollama
 from collections import OrderedDict
 from ddgs import DDGS
 import trafilatura
+import os
+import psycopg2
+import json
 
 app = Flask(__name__)
 
@@ -15,13 +18,98 @@ CORS(
     allow_headers=["Content-Type", "Authorization"],
     methods=["GET", "POST", "OPTIONS"]
 )
+DB_CONFIG = {
+    "host": "postgres",   # container name
+    "database": "ai_requests",
+    "user": os.getenv("PG_USER"),
+    "password": os.getenv("PG_PASS"),
+    "port": 5432
+}
 
 
-# ----------------------------
-# SESSION STORAGE (max 5)
-# ----------------------------
-SESSIONS = OrderedDict()
-MAX_SESSIONS = 5
+def get_db_connection():
+    return psycopg2.connect(**DB_CONFIG)
+
+
+def create_table():
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS ai_request_log (
+        id BIGSERIAL PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        session_id TEXT,
+        prompt TEXT NOT NULL,
+
+        http_status INTEGER,
+        response_time_ms INTEGER,
+
+        response_text TEXT,
+        
+
+        response_json JSONB,
+
+        error_message TEXT
+    );
+                
+    CREATE TABLE IF NOT EXISTS ai_chat_messages (
+        id BIGSERIAL PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL,              -- 'user' | 'assistant' | 'system'
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_session_id_created_at
+    ON ai_chat_messages(session_id, created_at);
+
+
+    """)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def save_log(
+    prompt,
+    session_id,
+    http_status,
+    response_time_ms,
+    response_text,
+    context,
+    response_json,
+    error_message
+):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+    INSERT INTO ai_request_log (
+        prompt,
+        session_id,
+        http_status,
+        response_time_ms,
+        response_text,
+        context,
+        response_json,
+        error_message
+    )
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+    """, (
+        prompt,
+        session_id,
+        http_status,
+        response_time_ms,
+        response_text,
+        context,
+        json.dumps(response_json) if response_json else None,
+        error_message
+    ))
+
+    conn.commit()
+    cur.close()
+    conn.close()
 
 client = ollama.Client(host="http://ollama:11434")
 
@@ -57,27 +145,45 @@ Source:
         
     return "\n\n".join(context_parts)
 
-
-def get_session(session_id):
+def get_session(session_id, limit=20):
     if not session_id:
-        return None
-    return SESSIONS.get(session_id)
+        return []
 
+    conn = get_db_connection()
+    cur = conn.cursor()
 
-def update_session(session_id, messages):
+    cur.execute("""
+        SELECT role, content
+        FROM ai_chat_messages
+        WHERE session_id = %s
+        ORDER BY created_at ASC
+        LIMIT %s
+    """, (session_id, limit))
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return [
+        {"role": role, "content": content}
+        for role, content in rows
+    ]
+
+def save_message(session_id, role, content):
     if not session_id:
         return
 
-    # If session exists, update order (LRU behavior)
-    if session_id in SESSIONS:
-        SESSIONS.move_to_end(session_id)
+    conn = get_db_connection()
+    cur = conn.cursor()
 
-    SESSIONS[session_id] = messages
+    cur.execute("""
+        INSERT INTO ai_chat_messages (session_id, role, content)
+        VALUES (%s, %s, %s)
+    """, (session_id, role, content))
 
-    # Enforce max sessions (LRU eviction)
-    if len(SESSIONS) > MAX_SESSIONS:
-        SESSIONS.popitem(last=False)
-
+    conn.commit()
+    cur.close()
+    conn.close()
 
 # ----------------------------
 # MAIN ENDPOINT
@@ -130,7 +236,7 @@ def search():
         return jsonify({"error": "prompt is required"}), 400
     print("Prompt: " + prompt)
     start_time = time.time()
-
+    
 
     context = build_context(search_web(prompt))
 
@@ -224,18 +330,17 @@ def chat():
         "role": "system",
         "content": system_prompt
     })
-
+    save_message(session_id, "system", system_prompt)
     # load session history if exists
     history = get_session(session_id)
-    if history:
-        messages.extend(history)
+    messages.extend(history)
 
     # add new user message
     messages.append({
         "role": "user",
         "content": prompt
     })
-
+    save_message(session_id, "user", prompt)
     # ----------------------------
     # CALL OLLAMA CHAT
     # ----------------------------
@@ -248,6 +353,7 @@ def chat():
     duration = end_time - start_time
 
     assistant_message = response["message"]["content"]
+    save_message(session_id, "assistant", assistant_message)
 
     # ----------------------------
     # TOKEN METRICS (if available)
@@ -264,20 +370,12 @@ def chat():
     if eval_count and duration > 0:
         tokens_per_sec = eval_count / duration
 
-    # ----------------------------
-    # UPDATE SESSION
-    # ----------------------------
-    if session_id:
-        new_history = messages[1:] + [{
-            "role": "assistant",
-            "content": assistant_message
-        }]
-        update_session(session_id, new_history)
 
     # ----------------------------
     # RESPONSE
     # ----------------------------
-    return jsonify({
+
+    response_json = jsonify({
         "model": model,
         "session_id": session_id,
         "response": assistant_message,
@@ -293,8 +391,11 @@ def chat():
             "load_duration": load_duration
         },
         "session_active": bool(session_id),
-        "session_count": len(SESSIONS)
     })
+
+    save_log(prompt, session_id, 200, duration, assistant_message, None, response_json, None)
+
+    return response_json
 
 
 # ----------------------------

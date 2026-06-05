@@ -4,3 +4,4 @@ flask-cors
 ollama
 ddgs
 trafilatura
+psycopg2-binary
